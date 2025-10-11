@@ -8,6 +8,7 @@ This repository contains an initial brand and experience proposal for **Cognitiv
 - Responsive layout tuned for desktop, tablet, and mobile navigation, optimized for touch-first experiences and keyboard navigation.
 - Accessibility improvements including a skip link and reduced-motion support for the animated background.
 - Branded favicon and header mark featuring the Cognitivis neural gradient logo.
+- Security hardening meta directives advising same-origin framing and MIME sniffing protection for static hosting environments.
 
 ## Getting started
 
