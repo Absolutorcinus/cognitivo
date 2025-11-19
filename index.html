@@ -238,10 +238,50 @@
       </section>
     </main>
 
+    <div class="chatbot-widget chatbot-widget--open" aria-live="polite">
+      <button
+        type="button"
+        class="chatbot-launcher"
+        id="chatbot-launcher"
+        aria-controls="chatbot-panel"
+        aria-expanded="false"
+      >
+        <span class="chatbot-launcher__label">Chat with Jisam</span>
+      </button>
+      <section class="chatbot-panel" id="chatbot-panel" role="dialog" aria-label="Chat with Jisam">
+        <header class="chatbot-panel__header">
+          <div>
+            <p class="eyebrow">Knowledge Base</p>
+            <h3>Ask Jisam</h3>
+            <p>
+              Jisam is our Cognitivis chatbot that answers questions using the on-site knowledge base.
+            </p>
+          </div>
+          <button type="button" class="chatbot-panel__minimize" id="chatbot-minimize" aria-label="Minimize chat">
+            <span aria-hidden="true">&minus;</span>
+          </button>
+        </header>
+        <div class="chatbot__messages" role="log" aria-live="polite"></div>
+        <form class="chatbot__form" id="chatbot-form">
+          <label class="sr-only" for="chatbot-input">Ask Jisam a question</label>
+          <textarea
+            id="chatbot-input"
+            name="question"
+            rows="3"
+            placeholder="How does Cognitivis ensure responsible AI deployments?"
+            required
+          ></textarea>
+          <button type="submit">Send</button>
+        </form>
+        <p class="chatbot__note">Powered by CognitivisAI.</p>
+      </section>
+    </div>
+
     <footer class="site-footer">
       <p>&copy; <span id="year"></span> Cognitivis. All rights reserved.</p>
     </footer>
 
     <script src="network.js"></script>
+    <script src="chatbot.js"></script>
   </body>
 </html>
