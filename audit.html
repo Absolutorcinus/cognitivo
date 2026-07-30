@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="VeriSight by Cognitivis extracts document data beside its source so reviewers can validate every field with confidence."
+    />
+    <meta name="theme-color" content="#071225" />
+    <title>VeriSight Document Audit | Cognitivis</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/audit.css" />
+    <script src="/audit.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#audit-workspace">Skip to audit workspace</a>
+
+    <header class="audit-header">
+      <a class="brand" href="/" aria-label="Return to Cognitivis home">
+        <span class="brand-mark" aria-hidden="true">C</span>
+        <span>Cognitivis</span>
+      </a>
+      <div class="product-name">
+        <span>VeriSight</span>
+        <small>Document audit demo</small>
+      </div>
+      <div class="privacy-badge">
+        <span aria-hidden="true"></span>
+        Local processing
+      </div>
+    </header>
+
+    <section class="document-bar" aria-label="Document controls">
+      <div class="document-identity">
+        <span class="file-mark" aria-hidden="true">DOC</span>
+        <div>
+          <strong id="document-name">Northstar_Invoice_0148.pdf</strong>
+          <span id="document-type">Supplier invoice Â· Demo workspace</span>
+        </div>
+      </div>
+      <div class="document-actions">
+        <label for="sample-select">Sample</label>
+        <select id="sample-select">
+          <option value="invoice">Supplier invoice</option>
+          <option value="purchase-order">Purchase order</option>
+          <option value="custom" disabled>Custom file</option>
+        </select>
+        <input
+          class="visually-hidden"
+          id="file-input"
+          type="file"
+          accept=".pdf,.png,.jpg,.jpeg,.txt,application/pdf,image/png,image/jpeg,text/plain"
+          aria-describedby="file-help"
+        />
+        <button class="button button-secondary" id="choose-file" type="button">
+          Choose file
+        </button>
+      </div>
+    </section>
+
+    <div class="notice-bar" aria-live="polite">
+      <div>
+        <span class="spark" aria-hidden="true">âś¦</span>
+        <p id="notice">
+          Built-in sample loaded. Review each extraction against its evidence.
+        </p>
+      </div>
+      <span id="file-help">PDF, PNG, JPG or TXT Â· 10 MB max</span>
+    </div>
+
+    <div class="error-banner" id="error-banner" role="alert" hidden></div>
+
+    <main class="audit-workspace" id="audit-workspace">
+      <section class="source-panel" aria-labelledby="source-heading">
+        <div class="panel-heading">
+          <div>
+            <span>SOURCE DOCUMENT</span>
+            <h1 id="source-heading">Evidence view</h1>
+          </div>
+          <span class="page-count">Page 1 of 1</span>
+        </div>
+        <div class="document-stage" id="drop-zone">
+          <article class="document-paper" aria-label="Document contents">
+            <span class="paper-label" id="paper-label">Supplier invoice</span>
+            <div id="document-text" class="document-text"></div>
+          </article>
+          <button class="drop-hint" id="drop-button" type="button">
+            Drop a supported file here or choose one
+          </button>
+        </div>
+      </section>
+
+      <section class="review-panel" aria-labelledby="review-heading">
+        <div class="review-summary">
+          <div class="confidence-summary">
+            <span>CONFIDENCE</span>
+            <strong id="average-confidence">95%</strong>
+          </div>
+          <div class="progress-summary">
+            <div>
+              <span>Review progress</span>
+              <strong id="progress-label">0 / 6 validated</strong>
+            </div>
+            <div
+              class="progress-track"
+              id="progress-track"
+              role="progressbar"
+              aria-label="Review completion"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow="0"
+            >
+              <span id="progress-fill"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="fields-heading">
+          <div>
+            <span>EXTRACTED DATA</span>
+            <h2 id="review-heading"><span id="field-count">6</span> fields found</h2>
+          </div>
+          <button id="accept-all" type="button">Accept all</button>
+        </div>
+
+        <div class="field-list" id="field-list"></div>
+
+        <div class="review-footer">
+          <div class="private-note">
+            <span aria-hidden="true">âś“</span>
+            <p>
+              <strong>Private demo</strong>
+              Files remain in this browser tab and are never uploaded.
+            </p>
+          </div>
+          <button class="button button-primary" id="complete-review" type="button" disabled>
+            Complete review <span aria-hidden="true">â†’</span>
+          </button>
+        </div>
+      </section>
+    </main>
+
+    <noscript>
+      <p class="noscript">
+        JavaScript is required for the interactive extraction review demo.
+      </p>
+    </noscript>
+  </body>
+</html>
