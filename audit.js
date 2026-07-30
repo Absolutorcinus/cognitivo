@@ -28,14 +28,14 @@ Acme Operations Europe
 12 Market Lane, Warsaw
 
 Description                       Amount
-Brand system implementation      â‚¬9,800.00
-Production support               â‚¬2,600.00
+Brand system implementation      €9,800.00
+Production support               €2,600.00
 
-Subtotal                         â‚¬12,400.00
-VAT 0%                               â‚¬0.00
-Service fee                          â‚¬80.00
+Subtotal                         €12,400.00
+VAT 0%                               €0.00
+Service fee                          €80.00
 
-TOTAL DUE                        â‚¬12,480.00
+TOTAL DUE                        €12,480.00
 Payment terms: Net 30
 IBAN: IE29 AIBK 9311 5212 3456 78`,
     fields: [
@@ -43,7 +43,7 @@ IBAN: IE29 AIBK 9311 5212 3456 78`,
       ["supplier", "Supplier", "Northstar Studio", 96, "NORTHSTAR STUDIO"],
       ["issue-date", "Issue date", "24 July 2026", 98],
       ["due-date", "Due date", "23 August 2026", 95],
-      ["total", "Total amount", "â‚¬12,480.00", 92],
+      ["total", "Total amount", "€12,480.00", 92],
       ["terms", "Payment terms", "Net 30", 88],
     ],
   },
@@ -61,10 +61,10 @@ Project: Finance process automation
 Cost centre: OPS-214
 Delivery date: 15 September 2026
 
-Software configuration           â‚¬18,500.00
-Training and enablement           â‚¬4,200.00
+Software configuration           €18,500.00
+Training and enablement           €4,200.00
 
-TOTAL                            â‚¬22,700.00
+TOTAL                            €22,700.00
 Currency: EUR
 Approved by: Marta Kowalska`,
     fields: [
@@ -72,7 +72,7 @@ Approved by: Marta Kowalska`,
       ["vendor", "Vendor", "Lumina Systems Ltd.", 97],
       ["cost-centre", "Cost centre", "OPS-214", 96],
       ["delivery-date", "Delivery date", "15 September 2026", 93],
-      ["total", "Total amount", "â‚¬22,700.00", 96],
+      ["total", "Total amount", "€22,700.00", 96],
       ["approver", "Approved by", "Marta Kowalska", 91],
     ],
   },
@@ -97,7 +97,7 @@ const extractionPatterns = [
   [
     "total",
     "Total amount",
-    /(?:total(?:\s+due)?|amount\s+due)\s*[:=-]?\s*((?:EUR|USD|GBP|PLN|â‚¬|\$|ÂŁ)\s?[\d,.]+|[\d,.]+\s?(?:EUR|USD|GBP|PLN))/i,
+    /(?:total(?:\s+due)?|amount\s+due)\s*[:=-]?\s*((?:EUR|USD|GBP|PLN|€|\$|£)\s?[\d,.]+|[\d,.]+\s?(?:EUR|USD|GBP|PLN))/i,
   ],
   ["currency", "Currency", /currency\s*[:=-]\s*([A-Z]{3})/i],
   [
@@ -154,7 +154,7 @@ function loadSample(id) {
   state.fields = sampleFields(sample);
   state.activeId = state.fields[0]?.id || "";
   elements.documentName.textContent = sample.name;
-  elements.documentType.textContent = `${sample.type} Â· Demo workspace`;
+  elements.documentType.textContent = `${sample.type} · Demo workspace`;
   elements.paperLabel.textContent = sample.type;
   elements.sampleSelect.value = id;
   setNotice(`${sample.type} sample loaded. Select a field to locate its evidence.`);
@@ -235,7 +235,7 @@ function createFieldCard(field) {
   const acceptButton = document.createElement("button");
   acceptButton.className = "accept-field";
   acceptButton.type = "button";
-  acceptButton.textContent = field.review === "accepted" ? "âś“" : "Accept";
+  acceptButton.textContent = field.review === "accepted" ? "✓" : "Accept";
   acceptButton.setAttribute("aria-label", `Accept ${field.label}`);
   acceptButton.addEventListener("click", () => {
     field.review = "accepted";
@@ -295,7 +295,7 @@ function updateSummary() {
     ? Math.round((accepted / state.fields.length) * 100)
     : 0;
 
-  elements.averageConfidence.textContent = confidence ? `${confidence}%` : "â€”";
+  elements.averageConfidence.textContent = confidence ? `${confidence}%` : "—";
   elements.fieldCount.textContent = String(state.fields.length);
   elements.progressLabel.textContent = `${accepted} / ${state.fields.length} validated`;
   elements.progressFill.style.width = `${completion}%`;
@@ -354,7 +354,7 @@ async function processFile(file) {
     state.content = content;
     state.fields = extractTextFields(content);
     state.activeId = state.fields[0]?.id || "";
-    elements.documentType.textContent = "Plain-text document Â· Local extraction";
+    elements.documentType.textContent = "Plain-text document · Local extraction";
     elements.paperLabel.textContent = "Plain-text document";
     setNotice(
       state.fields.length
@@ -368,12 +368,12 @@ async function processFile(file) {
   state.content = `FILE READY FOR PRIVATE REVIEW
 
 ${file.name}
-${formatBytes(file.size)} Â· ${file.type || "Unknown media type"}
+${formatBytes(file.size)} · ${file.type || "Unknown media type"}
 
 For privacy, this prototype does not transmit or render uploaded PDF and image content. A production version would connect this review experience to your approved OCR service.`;
   state.fields = [];
   state.activeId = "";
-  elements.documentType.textContent = "Private demo file Â· OCR disabled";
+  elements.documentType.textContent = "Private demo file · OCR disabled";
   elements.paperLabel.textContent = "Private demo file";
   setNotice(
     "File validated locally. OCR is intentionally disabled in this public demo; use a built-in sample to try the extraction workflow.",
