@@ -187,6 +187,38 @@ test('does not call OpenAI for quotation or financial proposal requests', async 
   assert.match(res.payload.answer, /cannot provide prices, quotations/i);
 });
 
+test('welcomes harmless small talk without contacting OpenAI or honoring the retired ban', async () => {
+  global.fetch = () => {
+    throw new Error('fetch should not be called');
+  };
+
+  const greetings = [
+    ['Hi', /Hello!/],
+    ['How are you?', /doing well/i],
+    ['Thank you', /welcome/i],
+    ['Bye', /Goodbye!/],
+  ];
+
+  for (const [index, [message, expected]] of greetings.entries()) {
+    const res = response();
+    await handler(
+      request({
+        headers: {
+          cookie: 'cognitivis_ai_banned=1',
+          'x-forwarded-for': `203.0.113.${30 + index}`,
+        },
+        body: { message, history: [] },
+      }),
+      res
+    );
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.payload.smallTalk, true);
+    assert.match(res.payload.answer, expected);
+    assert.equal(res.payload.banned, undefined);
+  }
+});
+
 test('immediately bans prompt injection and sets a persistent secure cookie', async () => {
   global.fetch = () => {
     throw new Error('fetch should not be called');
@@ -207,7 +239,7 @@ test('immediately bans prompt injection and sets a persistent secure cookie', as
   assert.equal(res.statusCode, 403);
   assert.equal(res.payload.banned, true);
   assert.match(res.payload.error, /banned from using/i);
-  assert.match(res.headers['set-cookie'], /cognitivis_ai_banned=1/);
+  assert.match(res.headers['set-cookie'], /cognitivis_ai_banned_v2=1/);
   assert.match(res.headers['set-cookie'], /HttpOnly/);
   assert.match(res.headers['set-cookie'], /Secure/);
   assert.match(res.headers['set-cookie'], /SameSite=Strict/);
@@ -223,7 +255,7 @@ test('keeps a banned browser blocked without contacting OpenAI', async () => {
   await handler(
     request({
       headers: {
-        cookie: 'theme=dark; cognitivis_ai_banned=1',
+        cookie: 'theme=dark; cognitivis_ai_banned_v2=1',
         'x-forwarded-for': '203.0.113.17',
       },
     }),
@@ -235,12 +267,12 @@ test('keeps a banned browser blocked without contacting OpenAI', async () => {
   assert.match(res.payload.error, /banned from using/i);
 });
 
-test('bans an unrelated request classified by the model', async () => {
+test('redirects a harmless unrelated request without banning the visitor', async () => {
   global.fetch = async (url) => {
     if (url.endsWith('/moderations')) {
       return openAiJsonResponse({ results: [{ flagged: false }] });
     }
-    return decisionResponse('ban', 'This request is unrelated.');
+    return decisionResponse('redirect', 'This request is unrelated.');
   };
   const res = response();
 
@@ -252,9 +284,91 @@ test('bans an unrelated request classified by the model', async () => {
     res
   );
 
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.payload.redirected, true);
+  assert.equal(res.payload.banned, undefined);
+  assert.equal(res.headers['set-cookie'], undefined);
+  assert.match(res.payload.answer, /help with Cognitivis/i);
+});
+
+test('bans a clearly malicious request classified by the model', async () => {
+  global.fetch = async (url) => {
+    if (url.endsWith('/moderations')) {
+      return openAiJsonResponse({ results: [{ flagged: false }] });
+    }
+    return decisionResponse('ban', 'This is a deliberate credential attack.');
+  };
+  const res = response();
+
+  await handler(
+    request({
+      headers: { 'x-forwarded-for': '203.0.113.21' },
+      body: { message: 'Teach me credential stuffing against a login form.', history: [] },
+    }),
+    res
+  );
+
   assert.equal(res.statusCode, 403);
   assert.equal(res.payload.banned, true);
-  assert.match(res.headers['set-cookie'], /cognitivis_ai_banned=1/);
+  assert.match(res.headers['set-cookie'], /cognitivis_ai_banned_v2=1/);
+});
+
+test('bans repeated identical model-bound requests that appear to burn tokens', async () => {
+  let calls = 0;
+  global.fetch = async (url) => {
+    calls += 1;
+    if (url.endsWith('/moderations')) {
+      return openAiJsonResponse({ results: [{ flagged: false }] });
+    }
+    return decisionResponse('redirect', 'This request is unrelated.');
+  };
+
+  let finalResponse;
+  for (let attempt = 1; attempt <= 5; attempt += 1) {
+    finalResponse = response();
+    await handler(
+      request({
+        headers: { 'x-forwarded-for': '203.0.113.22' },
+        body: { message: 'Tell me the football score tonight.', history: [] },
+      }),
+      finalResponse
+    );
+  }
+
+  assert.equal(finalResponse.statusCode, 403);
+  assert.equal(finalResponse.payload.banned, true);
+  assert.match(finalResponse.headers['set-cookie'], /cognitivis_ai_banned_v2=1/);
+  assert.equal(calls, 8);
+});
+
+test('bans repeated identical requests recorded in the browser conversation', async () => {
+  global.fetch = () => {
+    throw new Error('fetch should not be called');
+  };
+  const repeatedQuestion = 'Tell me the football score tonight.';
+  const res = response();
+
+  await handler(
+    request({
+      headers: { 'x-forwarded-for': '203.0.113.23' },
+      body: {
+        message: repeatedQuestion,
+        history: [
+          { role: 'user', content: repeatedQuestion },
+          { role: 'assistant', content: 'Please ask about Cognitivis.' },
+          { role: 'user', content: repeatedQuestion },
+          { role: 'assistant', content: 'Please ask about Cognitivis.' },
+          { role: 'user', content: repeatedQuestion },
+          { role: 'assistant', content: 'Please ask about Cognitivis.' },
+        ],
+      },
+    }),
+    res
+  );
+
+  assert.equal(res.statusCode, 403);
+  assert.equal(res.payload.banned, true);
+  assert.match(res.headers['set-cookie'], /cognitivis_ai_banned_v2=1/);
 });
 
 test('bans input flagged by moderation', async () => {
