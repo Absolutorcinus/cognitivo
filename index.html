@@ -269,12 +269,17 @@
             id="chatbot-input"
             name="question"
             rows="3"
+            maxlength="1200"
+            autocomplete="off"
+            aria-describedby="chatbot-note"
             placeholder="How does Cognitivis ensure responsible AI deployments?"
             required
           ></textarea>
           <button type="submit">Send</button>
         </form>
-        <p class="chatbot__note">Powered by CognitivisAI.</p>
+        <p class="chatbot__note" id="chatbot-note">
+          Powered by CognitivisAI. AI can make mistakes—do not share confidential information.
+        </p>
       </section>
     </div>
 

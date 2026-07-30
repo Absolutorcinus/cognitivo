@@ -17,3 +17,10 @@ python -m http.server 8000
 ```
 
 Then visit <http://localhost:8000/>.
+
+## Chatbot configuration
+
+Jisam calls OpenAI only from the server-side Vercel Function at `/api/chat`. Configure
+`OPENAI_API_KEY` as a Sensitive Vercel Environment Variable for Production and Preview.
+Never place an API key in `chatbot.js`, HTML, a public-prefixed variable, or a committed
+`.env` file. A new deployment is required after changing the secret.
