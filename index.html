@@ -239,7 +239,7 @@
       </section>
     </main>
 
-    <div class="chatbot-widget chatbot-widget--open" aria-live="polite">
+    <div class="chatbot-widget chatbot-widget--collapsed" aria-live="polite">
       <button
         type="button"
         class="chatbot-launcher"
@@ -247,15 +247,22 @@
         aria-controls="chatbot-panel"
         aria-expanded="false"
       >
-        <span class="chatbot-launcher__label">Chat with Jisam</span>
+        <span class="chatbot-launcher__icon" aria-hidden="true">✦</span>
+        <span class="chatbot-launcher__label">Chat with Assistant</span>
       </button>
-      <section class="chatbot-panel" id="chatbot-panel" role="dialog" aria-label="Chat with Jisam">
+      <section
+        class="chatbot-panel"
+        id="chatbot-panel"
+        role="dialog"
+        aria-label="Chat with Cognitivis AI Assistant"
+        aria-hidden="true"
+      >
         <header class="chatbot-panel__header">
           <div>
-            <p class="eyebrow">Knowledge Base</p>
-            <h3>Ask Jisam</h3>
+            <p class="eyebrow">Cognitivis support</p>
+            <h3>AI Assistant</h3>
             <p>
-              Jisam is our Cognitivis chatbot that answers questions using the on-site knowledge base.
+              Ask about Cognitivis, our services, responsible AI, or the document audit demo.
             </p>
           </div>
           <button type="button" class="chatbot-panel__minimize" id="chatbot-minimize" aria-label="Minimize chat">
@@ -264,7 +271,7 @@
         </header>
         <div class="chatbot__messages" role="log" aria-live="polite"></div>
         <form class="chatbot__form" id="chatbot-form">
-          <label class="sr-only" for="chatbot-input">Ask Jisam a question</label>
+          <label class="sr-only" for="chatbot-input">Ask the Cognitivis AI Assistant a question</label>
           <textarea
             id="chatbot-input"
             name="question"
@@ -272,13 +279,13 @@
             maxlength="1200"
             autocomplete="off"
             aria-describedby="chatbot-note"
-            placeholder="How does Cognitivis ensure responsible AI deployments?"
+            placeholder="Ask a question about Cognitivis…"
             required
           ></textarea>
           <button type="submit">Send</button>
         </form>
         <p class="chatbot__note" id="chatbot-note">
-          Powered by CognitivisAI. AI can make mistakes—do not share confidential information.
+          Company topics only. No quotations or financial proposals. Do not share confidential information.
         </p>
       </section>
     </div>

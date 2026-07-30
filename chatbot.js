@@ -1,6 +1,32 @@
-const chatbotName = 'Jisam';
+const assistantName = 'Cognitivis AI Assistant';
 const MAX_HISTORY_ITEMS = 6;
+const BAN_STORAGE_KEY = 'cognitivis_ai_banned_v1';
+const BAN_MESSAGE =
+  'You are banned from using the Cognitivis AI Assistant on this browser because the usage policy was violated.';
 const conversationHistory = [];
+let sessionBanned = false;
+
+function isLocallyBanned() {
+  if (sessionBanned) {
+    return true;
+  }
+
+  try {
+    sessionBanned = window.localStorage.getItem(BAN_STORAGE_KEY) === '1';
+  } catch {
+    sessionBanned = false;
+  }
+  return sessionBanned;
+}
+
+function persistBan() {
+  sessionBanned = true;
+  try {
+    window.localStorage.setItem(BAN_STORAGE_KEY, '1');
+  } catch {
+    // The server also stores the ban in a secure HttpOnly cookie.
+  }
+}
 
 function createMessageElement(text, sender) {
   const wrapper = document.createElement('div');
@@ -30,13 +56,13 @@ function rememberExchange(question, answer) {
   }
 }
 
-async function askJisam(question, container, input, submitButton) {
+async function askAssistant(question, container, input, submitButton, onBanned) {
   const trimmed = question.trim();
-  if (!trimmed) {
+  if (!trimmed || isLocallyBanned()) {
     return;
   }
 
-  const loadingMessage = appendMessage(container, 'Thinking…', 'jisam');
+  const loadingMessage = appendMessage(container, 'Thinking…', 'assistant');
   container.setAttribute('aria-busy', 'true');
   input.disabled = true;
   submitButton.disabled = true;
@@ -56,28 +82,40 @@ async function askJisam(question, container, input, submitButton) {
     });
 
     const data = await response.json().catch(() => ({}));
+    if (data.banned === true) {
+      persistBan();
+      loadingMessage.replaceWith(createMessageElement(data.error || BAN_MESSAGE, 'assistant'));
+      onBanned();
+      return;
+    }
+
     if (!response.ok) {
-      throw new Error(data.error || 'Jisam is unavailable right now. Please try again shortly.');
+      throw new Error(
+        data.error || 'The AI Assistant is unavailable right now. Please try again shortly.'
+      );
     }
 
     const answer = typeof data.answer === 'string' ? data.answer.trim() : '';
     if (!answer) {
-      throw new Error('Jisam could not prepare an answer right now. Please try again.');
+      throw new Error('The AI Assistant could not prepare an answer right now. Please try again.');
     }
 
     rememberExchange(trimmed, answer);
-    loadingMessage.replaceWith(createMessageElement(answer, 'jisam'));
+    loadingMessage.replaceWith(createMessageElement(answer, 'assistant'));
   } catch (error) {
     const message =
       error instanceof Error && error.message
         ? error.message
-        : 'Jisam is unavailable right now. Please try again shortly.';
-    loadingMessage.replaceWith(createMessageElement(message, 'jisam'));
+        : 'The AI Assistant is unavailable right now. Please try again shortly.';
+    loadingMessage.replaceWith(createMessageElement(message, 'assistant'));
   } finally {
     container.removeAttribute('aria-busy');
-    input.disabled = false;
-    submitButton.disabled = false;
-    input.focus();
+    const banned = isLocallyBanned();
+    input.disabled = banned;
+    submitButton.disabled = banned;
+    if (!banned) {
+      input.focus();
+    }
     container.scrollTop = container.scrollHeight;
   }
 }
@@ -91,6 +129,7 @@ function initChatbot() {
   const launcher = document.getElementById('chatbot-launcher');
   const minimizeButton = document.getElementById('chatbot-minimize');
   const panel = document.getElementById('chatbot-panel');
+  const note = document.getElementById('chatbot-note');
 
   if (
     !chatContainer ||
@@ -100,7 +139,8 @@ function initChatbot() {
     !widget ||
     !launcher ||
     !minimizeButton ||
-    !panel
+    !panel ||
+    !note
   ) {
     return;
   }
@@ -110,17 +150,31 @@ function initChatbot() {
     widget.classList.toggle('chatbot-widget--open', !collapsed);
     launcher.setAttribute('aria-expanded', (!collapsed).toString());
     panel.setAttribute('aria-hidden', collapsed ? 'true' : 'false');
-    if (!collapsed) {
+    if (!collapsed && !isLocallyBanned()) {
       input.focus();
     }
   };
 
-  appendMessage(
-    chatContainer,
-    `Hi, I'm ${chatbotName}. Ask me about Cognitivis, our AI services, or responsible AI delivery.`,
-    'jisam'
-  );
-  setCollapsed(false);
+  const applyBannedState = () => {
+    widget.classList.add('chatbot-widget--banned');
+    input.disabled = true;
+    submitButton.disabled = true;
+    input.placeholder = 'AI Assistant access is blocked';
+    note.textContent = 'Access to the AI Assistant has been blocked for this browser.';
+  };
+
+  if (isLocallyBanned()) {
+    appendMessage(chatContainer, BAN_MESSAGE, 'assistant');
+    applyBannedState();
+  } else {
+    appendMessage(
+      chatContainer,
+      `Hi, I’m the ${assistantName}. Ask me about Cognitivis, our AI services, responsible AI, or the document audit demo.`,
+      'assistant'
+    );
+  }
+
+  setCollapsed(true);
 
   launcher.addEventListener('click', () => setCollapsed(false));
   minimizeButton.addEventListener('click', () => setCollapsed(true));
@@ -135,13 +189,13 @@ function initChatbot() {
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     const question = input.value;
-    if (!question.trim() || submitButton.disabled) {
+    if (!question.trim() || submitButton.disabled || isLocallyBanned()) {
       return;
     }
 
     appendMessage(chatContainer, question, 'user');
     input.value = '';
-    await askJisam(question, chatContainer, input, submitButton);
+    await askAssistant(question, chatContainer, input, submitButton, applyBannedState);
   });
 }
 
