@@ -1,4 +1,4 @@
-const { createHash } = require('node:crypto');
+const { createHash, randomBytes } = require('node:crypto');
 const { deleteConversation, recordBlockedEvent, recordExchange } = require('./chat-storage');
 
 const MODEL = 'gpt-5-nano';
@@ -13,9 +13,12 @@ const REPEAT_WINDOW_MS = 5 * 60_000;
 const OPENAI_TIMEOUT_MS = 25_000;
 const BAN_COOKIE = 'cognitivis_ai_banned_v2';
 const BAN_MAX_AGE_SECONDS = 31_536_000;
-const STORAGE_CONSENT_VERSION = '2026-08-03';
+const STORAGE_CONSENT_VERSION = '2026-08-03-cookie-v1';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DELETION_TOKEN_PATTERN = /^[0-9a-f]{64}$/i;
+const VISITOR_COOKIE = 'cognitivis_chat_visitor_v1';
+const VISITOR_COOKIE_PATTERN = /^[0-9a-f]{64}$/i;
+const VISITOR_COOKIE_MAX_AGE_SECONDS = 31_536_000;
 const BAN_MESSAGE =
   'You are banned from using the Cognitivis AI Assistant on this browser because suspicious or abusive usage was detected.';
 const HANDOFF_MESSAGE =
@@ -115,10 +118,35 @@ function isBanned(req) {
   return parseCookies(req)[BAN_COOKIE] === '1';
 }
 
+function appendSetCookie(res, value) {
+  const cookies = Array.isArray(res.__cognitivisSetCookies) ? res.__cognitivisSetCookies : [];
+  cookies.push(value);
+  res.__cognitivisSetCookies = cookies;
+  res.setHeader('Set-Cookie', cookies.length === 1 ? cookies[0] : cookies);
+}
+
 function setBanCookie(res) {
-  res.setHeader(
-    'Set-Cookie',
+  appendSetCookie(
+    res,
     `${BAN_COOKIE}=1; Path=/; Max-Age=${BAN_MAX_AGE_SECONDS}; HttpOnly; Secure; SameSite=Strict`
+  );
+}
+
+function getOrCreateVisitorToken(req, res) {
+  const existing = parseCookies(req)[VISITOR_COOKIE];
+  if (VISITOR_COOKIE_PATTERN.test(existing || '')) return existing;
+  const token = randomBytes(32).toString('hex');
+  appendSetCookie(
+    res,
+    `${VISITOR_COOKIE}=${token}; Path=/; Max-Age=${VISITOR_COOKIE_MAX_AGE_SECONDS}; HttpOnly; Secure; SameSite=Strict`
+  );
+  return token;
+}
+
+function clearVisitorCookie(res) {
+  appendSetCookie(
+    res,
+    `${VISITOR_COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict`
   );
 }
 
@@ -422,6 +450,7 @@ async function sendStoredChat(res, status, conversation, payload, decision) {
       conversationId: conversation.conversationId,
       requestId: conversation.requestId,
       deletionToken: conversation.deletionToken,
+      visitorToken: conversation.visitorToken,
       consentVersion: conversation.consentVersion,
       message: conversation.message,
       answer,
@@ -470,6 +499,7 @@ module.exports = async function handler(req, res) {
     try {
       deletionRequest = validateDeletionRequest(parseBody(req));
       const result = await deleteConversation(deletionRequest);
+      if (result.deleted) clearVisitorCookie(res);
       return sendJson(res, result.deleted ? 200 : 404, {
         deleted: result.deleted,
         message: result.deleted
@@ -518,6 +548,8 @@ module.exports = async function handler(req, res) {
         : 'The chat request was not valid.';
     return sendJson(res, 400, { error: message });
   }
+
+  conversation.visitorToken = getOrCreateVisitorToken(req, res);
 
   if (hasImmediateBanTrigger(conversation)) {
     return banClientWithStorage(res, conversation);

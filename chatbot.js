@@ -2,7 +2,7 @@ const assistantName = 'Cognitivis AI Assistant';
 const MAX_HISTORY_ITEMS = 6;
 const BAN_STORAGE_KEY = 'cognitivis_ai_banned_v2';
 const CHAT_SESSION_KEY = 'cognitivis_chat_session_v1';
-const STORAGE_CONSENT_VERSION = '2026-08-03';
+const STORAGE_CONSENT_VERSION = '2026-08-03-cookie-v1';
 const BAN_MESSAGE =
   'You are banned from using the Cognitivis AI Assistant on this browser because suspicious or abusive usage was detected.';
 const conversationHistory = [];

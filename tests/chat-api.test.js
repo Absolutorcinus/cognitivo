@@ -27,7 +27,7 @@ function request(overrides = {}) {
       requestId: '49cce55d-8194-445d-a793-9cb3dc81b4ab',
       deletionToken: 'a'.repeat(64),
       storageConsent: true,
-      consentVersion: '2026-08-03',
+      consentVersion: '2026-08-03-cookie-v1',
       ...bodyOverrides,
     },
     socket: {},
@@ -52,6 +52,10 @@ function response() {
       return this;
     },
   };
+}
+
+function cookieHeader(res) {
+  return String(res.headers['set-cookie'] || '');
 }
 
 function openAiJsonResponse(payload) {
@@ -164,6 +168,7 @@ test('requires valid anonymous storage acknowledgement metadata', async () => {
   );
   assert.equal(res.statusCode, 400);
   assert.match(res.payload.error, /storage acknowledgement/i);
+  assert.equal(res.headers['set-cookie'], undefined);
 });
 
 test('uses the lowest-cost model and returns a company answer', async () => {
@@ -188,6 +193,10 @@ test('uses the lowest-cost model and returns a company answer', async () => {
     'Cognitivis builds responsible AI systems and document intelligence workflows.'
   );
   assert.equal(calls.length, 2);
+  assert.match(cookieHeader(res), /cognitivis_chat_visitor_v1=[0-9a-f]{64}/);
+  assert.match(cookieHeader(res), /HttpOnly/);
+  assert.match(cookieHeader(res), /Secure/);
+  assert.match(cookieHeader(res), /SameSite=Strict/);
 
   const responseRequest = JSON.parse(calls[1].options.body);
   assert.equal(responseRequest.store, false);
@@ -250,6 +259,25 @@ test('welcomes harmless small talk without contacting OpenAI or honoring the ret
   }
 });
 
+test('reuses a valid anonymous visitor cookie without rotating it', async () => {
+  global.fetch = () => {
+    throw new Error('fetch should not be called');
+  };
+  const res = response();
+  await handler(
+    request({
+      headers: {
+        cookie: `cognitivis_chat_visitor_v1=${'b'.repeat(64)}`,
+        'x-forwarded-for': '203.0.113.45',
+      },
+      body: { message: 'Hi', history: [] },
+    }),
+    res
+  );
+  assert.equal(res.statusCode, 200);
+  assert.doesNotMatch(cookieHeader(res), /cognitivis_chat_visitor_v1=/);
+});
+
 test('immediately bans prompt injection and sets a persistent secure cookie', async () => {
   global.fetch = () => {
     throw new Error('fetch should not be called');
@@ -270,11 +298,12 @@ test('immediately bans prompt injection and sets a persistent secure cookie', as
   assert.equal(res.statusCode, 403);
   assert.equal(res.payload.banned, true);
   assert.match(res.payload.error, /banned from using/i);
-  assert.match(res.headers['set-cookie'], /cognitivis_ai_banned_v2=1/);
-  assert.match(res.headers['set-cookie'], /HttpOnly/);
-  assert.match(res.headers['set-cookie'], /Secure/);
-  assert.match(res.headers['set-cookie'], /SameSite=Strict/);
-  assert.match(res.headers['set-cookie'], /Max-Age=31536000/);
+  assert.match(cookieHeader(res), /cognitivis_ai_banned_v2=1/);
+  assert.match(cookieHeader(res), /cognitivis_chat_visitor_v1=[0-9a-f]{64}/);
+  assert.match(cookieHeader(res), /HttpOnly/);
+  assert.match(cookieHeader(res), /Secure/);
+  assert.match(cookieHeader(res), /SameSite=Strict/);
+  assert.match(cookieHeader(res), /Max-Age=31536000/);
 });
 
 test('keeps a banned browser blocked without contacting OpenAI', async () => {
@@ -318,7 +347,8 @@ test('redirects a harmless unrelated request without banning the visitor', async
   assert.equal(res.statusCode, 200);
   assert.equal(res.payload.redirected, true);
   assert.equal(res.payload.banned, undefined);
-  assert.equal(res.headers['set-cookie'], undefined);
+  assert.match(cookieHeader(res), /cognitivis_chat_visitor_v1=[0-9a-f]{64}/);
+  assert.doesNotMatch(cookieHeader(res), /cognitivis_ai_banned_v2=1/);
   assert.match(res.payload.answer, /help with Cognitivis/i);
 });
 
@@ -341,7 +371,7 @@ test('bans a clearly malicious request classified by the model', async () => {
 
   assert.equal(res.statusCode, 403);
   assert.equal(res.payload.banned, true);
-  assert.match(res.headers['set-cookie'], /cognitivis_ai_banned_v2=1/);
+  assert.match(cookieHeader(res), /cognitivis_ai_banned_v2=1/);
 });
 
 test('bans repeated identical model-bound requests that appear to burn tokens', async () => {
@@ -368,7 +398,7 @@ test('bans repeated identical model-bound requests that appear to burn tokens', 
 
   assert.equal(finalResponse.statusCode, 403);
   assert.equal(finalResponse.payload.banned, true);
-  assert.match(finalResponse.headers['set-cookie'], /cognitivis_ai_banned_v2=1/);
+  assert.match(cookieHeader(finalResponse), /cognitivis_ai_banned_v2=1/);
   assert.equal(calls, 8);
 });
 
@@ -399,7 +429,7 @@ test('bans repeated identical requests recorded in the browser conversation', as
 
   assert.equal(res.statusCode, 403);
   assert.equal(res.payload.banned, true);
-  assert.match(res.headers['set-cookie'], /cognitivis_ai_banned_v2=1/);
+  assert.match(cookieHeader(res), /cognitivis_ai_banned_v2=1/);
 });
 
 test('bans input flagged by moderation', async () => {
