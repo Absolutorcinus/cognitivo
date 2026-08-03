@@ -3,6 +3,12 @@
   "private": true,
   "type": "commonjs",
   "scripts": {
-    "test": "node --test tests/chat-api.test.js"
+    "test": "node --test",
+    "db:migrate": "node scripts/migrate-chat.js",
+    "db:verify": "node scripts/verify-chat-storage.js",
+    "db:verify-api": "node scripts/verify-chat-api-storage.js"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.0.2"
   }
 }
