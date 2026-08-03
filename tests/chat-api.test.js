@@ -4,7 +4,11 @@ const test = require('node:test');
 const handler = require('../api/chat');
 
 function request(overrides = {}) {
-  const { headers: headerOverrides = {}, ...requestOverrides } = overrides;
+  const {
+    headers: headerOverrides = {},
+    body: bodyOverrides = {},
+    ...requestOverrides
+  } = overrides;
   return {
     method: 'POST',
     headers: {
@@ -16,7 +20,16 @@ function request(overrides = {}) {
       'x-forwarded-proto': 'https',
       ...headerOverrides,
     },
-    body: { message: 'What does Cognitivis do?', history: [] },
+    body: {
+      message: 'What does Cognitivis do?',
+      history: [],
+      conversationId: '936da01f-9abd-4d9d-80c7-02af85c822a8',
+      requestId: '49cce55d-8194-445d-a793-9cb3dc81b4ab',
+      deletionToken: 'a'.repeat(64),
+      storageConsent: true,
+      consentVersion: '2026-08-03',
+      ...bodyOverrides,
+    },
     socket: {},
     ...requestOverrides,
   };
@@ -71,6 +84,8 @@ test.beforeEach(() => {
 
 test.afterEach(() => {
   delete process.env.OPENAI_API_KEY;
+  delete process.env.REQUIRE_CHAT_STORAGE;
+  delete process.env.VERCEL;
   delete global.fetch;
 });
 
@@ -83,7 +98,7 @@ test('rejects unsupported methods without contacting OpenAI', async () => {
   await handler(request({ method: 'GET' }), res);
 
   assert.equal(res.statusCode, 405);
-  assert.equal(res.headers.allow, 'POST');
+  assert.equal(res.headers.allow, 'POST, DELETE');
   assert.equal(res.headers['cache-control'], 'no-store, max-age=0');
 });
 
@@ -133,6 +148,22 @@ test('rejects invalid content types and oversized messages', async () => {
     lengthRes
   );
   assert.equal(lengthRes.statusCode, 400);
+});
+
+test('requires valid anonymous storage acknowledgement metadata', async () => {
+  global.fetch = () => {
+    throw new Error('fetch should not be called');
+  };
+  const res = response();
+  await handler(
+    request({
+      headers: { 'x-forwarded-for': '203.0.113.44' },
+      body: { storageConsent: false },
+    }),
+    res
+  );
+  assert.equal(res.statusCode, 400);
+  assert.match(res.payload.error, /storage acknowledgement/i);
 });
 
 test('uses the lowest-cost model and returns a company answer', async () => {

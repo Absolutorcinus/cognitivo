@@ -1,4 +1,5 @@
 const { createHash } = require('node:crypto');
+const { deleteConversation, recordBlockedEvent, recordExchange } = require('./chat-storage');
 
 const MODEL = 'gpt-5-nano';
 const MAX_BODY_BYTES = 16_384;
@@ -12,6 +13,9 @@ const REPEAT_WINDOW_MS = 5 * 60_000;
 const OPENAI_TIMEOUT_MS = 25_000;
 const BAN_COOKIE = 'cognitivis_ai_banned_v2';
 const BAN_MAX_AGE_SECONDS = 31_536_000;
+const STORAGE_CONSENT_VERSION = '2026-08-03';
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const DELETION_TOKEN_PATTERN = /^[0-9a-f]{64}$/i;
 const BAN_MESSAGE =
   'You are banned from using the Cognitivis AI Assistant on this browser because suspicious or abusive usage was detected.';
 const HANDOFF_MESSAGE =
@@ -118,9 +122,9 @@ function setBanCookie(res) {
   );
 }
 
-function banClient(res) {
+function banClient(res, stored = false) {
   setBanCookie(res);
-  return sendJson(res, 403, { banned: true, error: BAN_MESSAGE });
+  return sendJson(res, 403, { banned: true, error: BAN_MESSAGE, stored });
 }
 
 function isSameOrigin(req) {
@@ -189,7 +193,36 @@ function validateConversation(body) {
     throw new RangeError('Conversation is too long. Please start a shorter question.');
   }
 
-  return { message, history: cleanHistory };
+  const conversationId = typeof body.conversationId === 'string' ? body.conversationId : '';
+  const requestId = typeof body.requestId === 'string' ? body.requestId : '';
+  const deletionToken = typeof body.deletionToken === 'string' ? body.deletionToken : '';
+  if (!UUID_PATTERN.test(conversationId) || !UUID_PATTERN.test(requestId)) {
+    throw new TypeError('Invalid conversation identifier.');
+  }
+  if (!DELETION_TOKEN_PATTERN.test(deletionToken)) {
+    throw new TypeError('Invalid conversation deletion token.');
+  }
+  if (body.storageConsent !== true || body.consentVersion !== STORAGE_CONSENT_VERSION) {
+    throw new TypeError('Conversation storage acknowledgement is required.');
+  }
+
+  return {
+    message,
+    history: cleanHistory,
+    conversationId,
+    requestId,
+    deletionToken,
+    consentVersion: STORAGE_CONSENT_VERSION,
+  };
+}
+
+function validateDeletionRequest(body) {
+  const conversationId = typeof body.conversationId === 'string' ? body.conversationId : '';
+  const deletionToken = typeof body.deletionToken === 'string' ? body.deletionToken : '';
+  if (!UUID_PATTERN.test(conversationId) || !DELETION_TOKEN_PATTERN.test(deletionToken)) {
+    throw new TypeError('Invalid conversation deletion request.');
+  }
+  return { conversationId, deletionToken };
 }
 
 function getClientIdentifier(req) {
@@ -381,11 +414,45 @@ function containsFinancialProposal(text) {
   );
 }
 
+async function sendStoredChat(res, status, conversation, payload, decision) {
+  const answer = typeof payload.answer === 'string' ? payload.answer : payload.error;
+  let stored = false;
+  try {
+    const result = await recordExchange({
+      conversationId: conversation.conversationId,
+      requestId: conversation.requestId,
+      deletionToken: conversation.deletionToken,
+      consentVersion: conversation.consentVersion,
+      message: conversation.message,
+      answer,
+      decision,
+    });
+    stored = result.stored === true;
+  } catch (error) {
+    console.error('Chat transcript storage failed', { name: error?.name || 'Error' });
+    return sendJson(res, 503, {
+      error: 'The AI Assistant could not securely store this exchange. Please try again shortly.',
+    });
+  }
+  return sendJson(res, status, { ...payload, stored });
+}
+
+async function banClientWithStorage(res, conversation) {
+  let stored = false;
+  try {
+    const result = await recordBlockedEvent(conversation);
+    stored = result.stored === true;
+  } catch (error) {
+    console.error('Blocked chat event storage failed', { name: error?.name || 'Error' });
+  }
+  return banClient(res, stored);
+}
+
 module.exports = async function handler(req, res) {
   setResponseHeaders(res);
 
-  if (req.method !== 'POST') {
-    res.setHeader('Allow', 'POST');
+  if (!['POST', 'DELETE'].includes(req.method)) {
+    res.setHeader('Allow', 'POST, DELETE');
     return sendJson(res, 405, { error: 'Method not allowed.' });
   }
 
@@ -396,6 +463,28 @@ module.exports = async function handler(req, res) {
   const contentType = getHeader(req, 'content-type') || '';
   if (!contentType.toLowerCase().startsWith('application/json')) {
     return sendJson(res, 415, { error: 'Content-Type must be application/json.' });
+  }
+
+  if (req.method === 'DELETE') {
+    let deletionRequest;
+    try {
+      deletionRequest = validateDeletionRequest(parseBody(req));
+      const result = await deleteConversation(deletionRequest);
+      return sendJson(res, result.deleted ? 200 : 404, {
+        deleted: result.deleted,
+        message: result.deleted
+          ? 'This conversation has been permanently deleted.'
+          : 'The conversation was not found or could not be deleted.',
+      });
+    } catch (error) {
+      console.error('Chat deletion failed', { name: error?.name || 'Error' });
+      return sendJson(res, error instanceof TypeError || error instanceof RangeError ? 400 : 503, {
+        error:
+          error instanceof TypeError || error instanceof RangeError
+            ? error.message
+            : 'Conversation deletion is temporarily unavailable.',
+      });
+    }
   }
 
   if (isBanned(req)) {
@@ -418,29 +507,48 @@ module.exports = async function handler(req, res) {
   try {
     conversation = validateConversation(parseBody(req));
   } catch (error) {
+    const safeValidationMessages = new Set([
+      'Invalid conversation identifier.',
+      'Invalid conversation deletion token.',
+      'Conversation storage acknowledgement is required.',
+    ]);
     const message =
-      error instanceof RangeError ? error.message : 'The chat request was not valid.';
+      error instanceof RangeError || safeValidationMessages.has(error?.message)
+        ? error.message
+        : 'The chat request was not valid.';
     return sendJson(res, 400, { error: message });
   }
 
   if (hasImmediateBanTrigger(conversation)) {
-    return banClient(res);
+    return banClientWithStorage(res, conversation);
   }
 
   const smallTalkResponse = getSmallTalkResponse(conversation.message);
   if (smallTalkResponse) {
-    return sendJson(res, 200, { answer: smallTalkResponse, smallTalk: true });
+    return sendStoredChat(
+      res,
+      200,
+      conversation,
+      { answer: smallTalkResponse, smallTalk: true },
+      'small_talk'
+    );
   }
 
   if (isFinancialRequest(conversation.message)) {
-    return sendJson(res, 200, { answer: HANDOFF_MESSAGE, handoff: true });
+    return sendStoredChat(
+      res,
+      200,
+      conversation,
+      { answer: HANDOFF_MESSAGE, handoff: true },
+      'handoff'
+    );
   }
 
   if (
     hasRepeatedConversationRequest(conversation) ||
     isRepeatedTokenBurn(clientId, conversation.message)
   ) {
-    return banClient(res);
+    return banClientWithStorage(res, conversation);
   }
 
   const controller = new AbortController();
@@ -452,7 +560,7 @@ module.exports = async function handler(req, res) {
       .join('\n');
 
     if (await isFlagged(moderationText, controller.signal)) {
-      return banClient(res);
+      return banClientWithStorage(res, conversation);
     }
 
     const response = await openAiRequest(
@@ -482,20 +590,34 @@ module.exports = async function handler(req, res) {
       const requestId = response.headers.get('x-request-id') || 'unavailable';
       console.error('OpenAI response request failed', { status: response.status, requestId });
       if (response.status === 429) {
-        return sendJson(res, 429, {
-          error: 'The AI Assistant is busy right now. Please try again shortly.',
-        });
+        return sendStoredChat(
+          res,
+          429,
+          conversation,
+          { error: 'The AI Assistant is busy right now. Please try again shortly.' },
+          'upstream_busy'
+        );
       }
-      return sendJson(res, 502, { error: 'The AI Assistant is temporarily unavailable.' });
+      return sendStoredChat(
+        res,
+        502,
+        conversation,
+        { error: 'The AI Assistant is temporarily unavailable.' },
+        'upstream_error'
+      );
     }
 
     const data = await response.json();
     const outputText = extractOutputText(data);
     if (!outputText) {
       console.error('OpenAI response contained no output text');
-      return sendJson(res, 502, {
-        error: 'The AI Assistant could not prepare an answer right now.',
-      });
+      return sendStoredChat(
+        res,
+        502,
+        conversation,
+        { error: 'The AI Assistant could not prepare an answer right now.' },
+        'empty_response'
+      );
     }
 
     let result;
@@ -503,32 +625,58 @@ module.exports = async function handler(req, res) {
       result = parseDecision(outputText);
     } catch (error) {
       console.error('OpenAI response did not match the decision schema');
-      return sendJson(res, 502, {
-        error: 'The AI Assistant could not safely prepare an answer right now.',
-      });
+      return sendStoredChat(
+        res,
+        502,
+        conversation,
+        { error: 'The AI Assistant could not safely prepare an answer right now.' },
+        'invalid_response'
+      );
     }
 
     if (result.decision === 'ban') {
-      return banClient(res);
+      return banClientWithStorage(res, conversation);
     }
 
     if (result.decision === 'redirect') {
-      return sendJson(res, 200, { answer: REDIRECT_MESSAGE, redirected: true });
+      return sendStoredChat(
+        res,
+        200,
+        conversation,
+        { answer: REDIRECT_MESSAGE, redirected: true },
+        'redirect'
+      );
     }
 
     if (result.decision === 'handoff' || containsFinancialProposal(result.message)) {
-      return sendJson(res, 200, { answer: HANDOFF_MESSAGE, handoff: true });
+      return sendStoredChat(
+        res,
+        200,
+        conversation,
+        { answer: HANDOFF_MESSAGE, handoff: true },
+        'handoff'
+      );
     }
 
-    return sendJson(res, 200, { answer: result.message });
+    return sendStoredChat(res, 200, conversation, { answer: result.message }, 'answer');
   } catch (error) {
     if (error?.name === 'AbortError') {
-      return sendJson(res, 504, {
-        error: 'The AI Assistant took too long to respond. Please try again.',
-      });
+      return sendStoredChat(
+        res,
+        504,
+        conversation,
+        { error: 'The AI Assistant took too long to respond. Please try again.' },
+        'timeout'
+      );
     }
     console.error('Chat request failed', { name: error?.name || 'Error' });
-    return sendJson(res, 502, { error: 'The AI Assistant is temporarily unavailable.' });
+    return sendStoredChat(
+      res,
+      502,
+      conversation,
+      { error: 'The AI Assistant is temporarily unavailable.' },
+      'request_error'
+    );
   } finally {
     clearTimeout(timeout);
   }

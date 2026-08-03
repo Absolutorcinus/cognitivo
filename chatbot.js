@@ -1,10 +1,54 @@
 const assistantName = 'Cognitivis AI Assistant';
 const MAX_HISTORY_ITEMS = 6;
 const BAN_STORAGE_KEY = 'cognitivis_ai_banned_v2';
+const CHAT_SESSION_KEY = 'cognitivis_chat_session_v1';
+const STORAGE_CONSENT_VERSION = '2026-08-03';
 const BAN_MESSAGE =
   'You are banned from using the Cognitivis AI Assistant on this browser because suspicious or abusive usage was detected.';
 const conversationHistory = [];
 let sessionBanned = false;
+let conversationSession = createChatSession();
+
+function createDeletionToken() {
+  const bytes = new Uint8Array(32);
+  window.crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function createChatSession() {
+  return {
+    conversationId: window.crypto.randomUUID(),
+    deletionToken: createDeletionToken(),
+    stored: false,
+  };
+}
+
+function loadChatSession() {
+  try {
+    const saved = JSON.parse(window.sessionStorage.getItem(CHAT_SESSION_KEY) || 'null');
+    if (
+      typeof saved?.conversationId === 'string' &&
+      typeof saved?.deletionToken === 'string' &&
+      /^[0-9a-f-]{36}$/i.test(saved.conversationId) &&
+      /^[0-9a-f]{64}$/i.test(saved.deletionToken)
+    ) {
+      conversationSession = { ...saved, stored: saved.stored === true };
+      return;
+    }
+  } catch {
+    // Start a fresh anonymous session if browser storage is unavailable.
+  }
+  conversationSession = createChatSession();
+  persistChatSession();
+}
+
+function persistChatSession() {
+  try {
+    window.sessionStorage.setItem(CHAT_SESSION_KEY, JSON.stringify(conversationSession));
+  } catch {
+    // The in-memory session still supports chat and deletion until the page closes.
+  }
+}
 
 function isLocallyBanned() {
   if (sessionBanned) {
@@ -56,7 +100,7 @@ function rememberExchange(question, answer) {
   }
 }
 
-async function askAssistant(question, container, input, submitButton, onBanned) {
+async function askAssistant(question, container, input, submitButton, deleteButton, onBanned) {
   const trimmed = question.trim();
   if (!trimmed || isLocallyBanned()) {
     return;
@@ -78,12 +122,22 @@ async function askAssistant(question, container, input, submitButton, onBanned) 
       body: JSON.stringify({
         message: trimmed,
         history: conversationHistory.slice(-MAX_HISTORY_ITEMS),
+        conversationId: conversationSession.conversationId,
+        requestId: window.crypto.randomUUID(),
+        deletionToken: conversationSession.deletionToken,
+        storageConsent: true,
+        consentVersion: STORAGE_CONSENT_VERSION,
       }),
     });
 
     const data = await response.json().catch(() => ({}));
     if (data.banned === true) {
       persistBan();
+      if (data.stored === true) {
+        conversationSession.stored = true;
+        persistChatSession();
+      }
+      deleteButton.hidden = !conversationSession.stored;
       loadingMessage.replaceWith(createMessageElement(data.error || BAN_MESSAGE, 'assistant'));
       onBanned();
       return;
@@ -101,6 +155,9 @@ async function askAssistant(question, container, input, submitButton, onBanned) 
     }
 
     rememberExchange(trimmed, answer);
+    conversationSession.stored = conversationSession.stored || data.stored === true;
+    persistChatSession();
+    deleteButton.hidden = !conversationSession.stored;
     loadingMessage.replaceWith(createMessageElement(answer, 'assistant'));
   } catch (error) {
     const message =
@@ -130,6 +187,8 @@ function initChatbot() {
   const minimizeButton = document.getElementById('chatbot-minimize');
   const panel = document.getElementById('chatbot-panel');
   const note = document.getElementById('chatbot-note');
+  const storageConsent = document.getElementById('chatbot-storage-consent');
+  const deleteButton = document.getElementById('chatbot-delete');
 
   if (
     !chatContainer ||
@@ -140,7 +199,9 @@ function initChatbot() {
     !launcher ||
     !minimizeButton ||
     !panel ||
-    !note
+    !note ||
+    !storageConsent ||
+    !deleteButton
   ) {
     return;
   }
@@ -152,6 +213,9 @@ function initChatbot() {
     panel.setAttribute('aria-hidden', collapsed ? 'true' : 'false');
     if (!collapsed && !isLocallyBanned()) {
       input.focus();
+      window.requestAnimationFrame(() => {
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+      });
     }
   };
 
@@ -162,6 +226,9 @@ function initChatbot() {
     input.placeholder = 'AI Assistant access is blocked';
     note.textContent = 'Access to the AI Assistant has been blocked for this browser.';
   };
+
+  loadChatSession();
+  deleteButton.hidden = !conversationSession.stored;
 
   if (isLocallyBanned()) {
     appendMessage(chatContainer, BAN_MESSAGE, 'assistant');
@@ -186,17 +253,63 @@ function initChatbot() {
     }
   });
 
+  storageConsent.addEventListener('change', () => {
+    submitButton.disabled = !storageConsent.checked || isLocallyBanned();
+  });
+
+  deleteButton.addEventListener('click', async () => {
+    if (!window.confirm('Permanently delete this stored conversation?')) return;
+    deleteButton.disabled = true;
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'DELETE',
+        credentials: 'same-origin',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify(conversationSession),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data.deleted !== true) {
+        throw new Error(data.error || data.message || 'This conversation could not be deleted.');
+      }
+      conversationHistory.splice(0);
+      conversationSession = createChatSession();
+      persistChatSession();
+      chatContainer.replaceChildren();
+      appendMessage(chatContainer, 'Your stored conversation has been permanently deleted.', 'assistant');
+      appendMessage(chatContainer, `Hi, I’m the ${assistantName}. How can I help with Cognitivis?`, 'assistant');
+      deleteButton.hidden = true;
+    } catch (error) {
+      appendMessage(
+        chatContainer,
+        error instanceof Error ? error.message : 'Conversation deletion is temporarily unavailable.',
+        'assistant'
+      );
+    } finally {
+      deleteButton.disabled = false;
+    }
+  });
+
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     const question = input.value;
-    if (!question.trim() || submitButton.disabled || isLocallyBanned()) {
+    if (!question.trim() || !storageConsent.checked || submitButton.disabled || isLocallyBanned()) {
+      if (!storageConsent.checked) storageConsent.focus();
       return;
     }
 
     appendMessage(chatContainer, question, 'user');
     input.value = '';
-    await askAssistant(question, chatContainer, input, submitButton, applyBannedState);
+    await askAssistant(
+      question,
+      chatContainer,
+      input,
+      submitButton,
+      deleteButton,
+      applyBannedState
+    );
   });
+
+  submitButton.disabled = !storageConsent.checked || isLocallyBanned();
 }
 
 document.addEventListener('DOMContentLoaded', initChatbot);

@@ -5,6 +5,12 @@
       "maxDuration": 30
     }
   },
+  "crons": [
+    {
+      "path": "/api/cleanup-chat",
+      "schedule": "17 3 * * *"
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",
