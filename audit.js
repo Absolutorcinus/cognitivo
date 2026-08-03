@@ -111,6 +111,7 @@ const state = {
   content: "",
   fields: [],
   activeId: "",
+  completed: false,
 };
 
 const elements = {
@@ -124,6 +125,8 @@ const elements = {
   dropButton: document.querySelector("#drop-button"),
   dropZone: document.querySelector("#drop-zone"),
   errorBanner: document.querySelector("#error-banner"),
+  exportCsv: document.querySelector("#export-csv"),
+  exportJson: document.querySelector("#export-json"),
   fieldCount: document.querySelector("#field-count"),
   fieldList: document.querySelector("#field-list"),
   fileInput: document.querySelector("#file-input"),
@@ -153,6 +156,7 @@ function loadSample(id) {
   state.content = sample.content;
   state.fields = sampleFields(sample);
   state.activeId = state.fields[0]?.id || "";
+  state.completed = false;
   elements.documentName.textContent = sample.name;
   elements.documentType.textContent = `${sample.type} · Demo workspace`;
   elements.paperLabel.textContent = sample.type;
@@ -226,6 +230,7 @@ function createFieldCard(field) {
   input.addEventListener("input", (event) => {
     field.value = event.target.value;
     field.review = "attention";
+    state.completed = false;
     updateSummary();
     card.classList.remove("is-accepted");
     card.classList.add("needs-attention");
@@ -303,7 +308,9 @@ function updateSummary() {
   elements.acceptAll.disabled =
     !state.fields.length || accepted === state.fields.length;
   elements.completeReview.disabled =
-    !state.fields.length || accepted !== state.fields.length;
+    !state.fields.length || accepted !== state.fields.length || state.completed;
+  elements.exportCsv.disabled = !state.completed;
+  elements.exportJson.disabled = !state.completed;
 }
 
 function render() {
@@ -332,6 +339,7 @@ function extractTextFields(content) {
 
 async function processFile(file) {
   clearError();
+  state.completed = false;
   const extension = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
   const typeAllowed =
     ALLOWED_MIME_TYPES.has(file.type) ||
@@ -405,10 +413,52 @@ elements.acceptAll.addEventListener("click", () => {
   render();
 });
 elements.completeReview.addEventListener("click", () => {
+  state.completed = true;
+  updateSummary();
   setNotice(
-    "Review complete. This validated record is now ready for an approved export workflow.",
+    "Review complete. The validated record can now be exported as CSV or JSON.",
   );
 });
+
+function downloadFile(filename, content, type) {
+  const url = URL.createObjectURL(new Blob([content], { type }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function exportRecord(format) {
+  if (!state.completed) return;
+  const record = {
+    document: elements.documentName.textContent || "document",
+    reviewStatus: "validated",
+    reviewedAt: new Date().toISOString(),
+    fields: state.fields.map(({ id, label, value, confidence, source }) => ({
+      id,
+      label,
+      value,
+      confidence,
+      source,
+      status: "accepted",
+    })),
+  };
+
+  if (format === "json") {
+    downloadFile("verisight-validated-record.json", JSON.stringify(record, null, 2), "application/json;charset=utf-8");
+  } else {
+    const escapeCsv = (value) => `"${String(value).replaceAll('"', '""')}"`;
+    const rows = [["field_id", "label", "value", "confidence", "source", "status"], ...record.fields.map((field) => [field.id, field.label, field.value, field.confidence, field.source, field.status])];
+    downloadFile("verisight-validated-record.csv", rows.map((row) => row.map(escapeCsv).join(",")).join("\r\n"), "text/csv;charset=utf-8");
+  }
+  setNotice(`Validated ${format.toUpperCase()} export downloaded locally. No document data was uploaded.`);
+}
+
+elements.exportCsv.addEventListener("click", () => exportRecord("csv"));
+elements.exportJson.addEventListener("click", () => exportRecord("json"));
 
 ["dragenter", "dragover"].forEach((type) => {
   elements.dropZone.addEventListener(type, (event) => {

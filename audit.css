@@ -402,7 +402,7 @@ select:focus-visible {
 .paper-label {
   display: inline-block;
   margin-bottom: 1.7rem;
-  color: #75849a;
+  color: #586679;
   font-family: "DM Mono", monospace;
   font-size: 0.58rem;
   letter-spacing: 0.08em;
@@ -693,6 +693,17 @@ select:focus-visible {
   background: var(--panel);
 }
 
+.review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  justify-content: flex-end;
+}
+
+.review-actions .button {
+  min-height: 36px;
+}
+
 .private-note {
   min-width: 0;
   display: flex;
@@ -816,6 +827,14 @@ select:focus-visible {
   .review-footer {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .review-actions {
+    justify-content: stretch;
+  }
+
+  .review-actions .button {
+    flex: 1 1 140px;
   }
 }
 

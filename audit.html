@@ -9,6 +9,7 @@
     />
     <meta name="theme-color" content="#071225" />
     <title>VeriSight Document Audit | Cognitivis</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -22,7 +23,7 @@
     <a class="skip-link" href="#audit-workspace">Skip to audit workspace</a>
 
     <header class="audit-header">
-      <a class="brand" href="/" aria-label="Return to Cognitivis home">
+      <a class="brand" href="/">
         <span class="brand-mark" aria-hidden="true">C</span>
         <span>Cognitivis</span>
       </a>
@@ -57,10 +58,12 @@
           type="file"
           accept=".pdf,.png,.jpg,.jpeg,.txt,application/pdf,image/png,image/jpeg,text/plain"
           aria-describedby="file-help"
+          aria-label="Choose a document for local review"
         />
         <button class="button button-secondary" id="choose-file" type="button">
           Choose file
         </button>
+        <a class="button button-secondary" href="/trust">Trust &amp; privacy</a>
       </div>
     </section>
 
@@ -139,9 +142,13 @@
               Files remain in this browser tab and are never uploaded.
             </p>
           </div>
-          <button class="button button-primary" id="complete-review" type="button" disabled>
-            Complete review <span aria-hidden="true">→</span>
-          </button>
+          <div class="review-actions">
+            <button class="button button-secondary" id="export-csv" type="button" disabled>Export CSV</button>
+            <button class="button button-secondary" id="export-json" type="button" disabled>Export JSON</button>
+            <button class="button button-primary" id="complete-review" type="button" disabled>
+              Complete review <span aria-hidden="true">&rarr;</span>
+            </button>
+          </div>
         </div>
       </section>
     </main>
