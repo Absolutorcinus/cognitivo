@@ -268,6 +268,59 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+
+  const briefForm = document.getElementById('project-brief-form');
+  const copyBriefButton = document.getElementById('copy-project-brief');
+  const briefStatus = document.getElementById('project-brief-status');
+
+  if (briefForm && copyBriefButton && briefStatus) {
+    const createBrief = () => {
+      if (!briefForm.reportValidity()) return null;
+      const data = new FormData(briefForm);
+      return [
+        'COGNITIVIS PROJECT BRIEF',
+        `Prepared: ${new Date().toLocaleDateString('en-GB')}`,
+        '',
+        `Name: ${data.get('name')}`,
+        `Organization: ${data.get('organization')}`,
+        `Work email: ${data.get('email')}`,
+        `Starting point: ${data.get('projectType')}`,
+        `Timing: ${data.get('timing')}`,
+        '',
+        'WHAT SHOULD IMPROVE?',
+        String(data.get('message') || '').trim(),
+        '',
+        'This brief was generated locally at cognitivis.ai. It was not submitted or stored by the website.',
+      ].join('\n');
+    };
+
+    briefForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const brief = createBrief();
+      if (!brief) return;
+      const blob = new Blob([brief], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'cognitivis-project-brief.txt';
+      document.body.append(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      briefStatus.textContent = 'Project brief downloaded. Nothing was sent or stored.';
+    });
+
+    copyBriefButton.addEventListener('click', async () => {
+      const brief = createBrief();
+      if (!brief) return;
+      try {
+        await navigator.clipboard.writeText(brief);
+        briefStatus.textContent = 'Project brief copied. Nothing was sent or stored.';
+      } catch {
+        briefStatus.textContent = 'Copying is unavailable in this browser. Use Download brief instead.';
+      }
+    });
+  }
 });
 
 function handleMotionPreferenceChange() {

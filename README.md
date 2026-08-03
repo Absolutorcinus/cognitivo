@@ -1,10 +1,11 @@
 # Cognitivis Web Concept
 
-This repository contains an initial brand and experience proposal for **Cognitivis**, an AI-first venture studio. The concept includes:
+This repository contains the public website for **Cognitivis**, a responsible AI delivery studio. The experience includes:
 
 - A dynamic, animated particle-network background inspired by intelligent neural connections.
 - A hero narrative articulating Cognitivis' mission and positioning.
-- Proposal, solutions, approach, client perspectives, and contact sections tailored to prospective partners.
+- Service, Trust Center, AI readiness, transparent engagement-pattern, and private project-brief experiences.
+- The VeriSight browser-based document review demo with validated CSV and JSON export.
 - Responsive layout tuned for desktop, tablet, and mobile navigation, optimized for touch-first experiences and keyboard navigation.
 - Accessibility improvements including a skip link and reduced-motion support for the animated background.
 
